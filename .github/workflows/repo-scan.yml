@@ -25,6 +25,7 @@ jobs:
           RESEND_KEY: ${{ secrets.RESEND_KEY }}
           RESEND_MAIL: ${{ secrets.RESEND_MAIL }}
           REPORT_RECIPIENT: ${{ secrets.REPORT_RECIPIENT }}
+          GITHUB_STEP_SUMMARY: ${{ github.step_summary }}
         run: |
           python - <<'PY'
           import base64
@@ -130,6 +131,21 @@ jobs:
             "findings": findings,
           }
 
+          summary_path = os.environ.get("GITHUB_STEP_SUMMARY", "").strip()
+          if summary_path:
+            with open(summary_path, "a", encoding="utf-8") as handle:
+              handle.write("# Conlenz Repo Scan\n\n")
+              handle.write(f"- Folder: {ROOT}\n")
+              handle.write(f"- Generated at: {report['generated_at']}\n")
+              handle.write(f"- Files scanned: {report['files_scanned']}\n")
+              handle.write(f"- Files flagged: {report['files_flagged']}\n\n")
+              if findings:
+                handle.write("## Top Findings\n\n")
+                for item in findings[:10]:
+                  handle.write(
+                    f"- {item['rule']}: {item['file_path']} ({item['snippet']})\n"
+                  )
+
           timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
           json_path = REPORTS_DIR / f"scan_report_{timestamp}.json"
           csv_path = REPORTS_DIR / f"scan_report_{timestamp}.csv"
@@ -177,9 +193,16 @@ jobs:
               "Content-Type": "application/json",
             },
           )
-          with request.urlopen(req, timeout=30) as resp:
-            if resp.status >= 300:
-              raise RuntimeError(f"Resend error {resp.status}: {resp.read().decode('utf-8')}")
+          try:
+            with request.urlopen(req, timeout=30) as resp:
+              if resp.status >= 300:
+                raise RuntimeError(f"Resend error {resp.status}: {resp.read().decode('utf-8')}")
+          except Exception as exc:
+            if summary_path:
+              with open(summary_path, "a", encoding="utf-8") as handle:
+                handle.write("\n## Email Delivery\n\n")
+                handle.write(f"- Failed to send email: {exc}\n")
+            print(f"Email delivery failed: {exc}")
           PY
 
       - name: Upload reports
