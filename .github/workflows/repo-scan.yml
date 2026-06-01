@@ -1,0 +1,190 @@
+name: conlenz-repo-scan
+
+on:
+  
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Run scan
+        env:
+          RESEND_KEY: ${{ secrets.RESEND_KEY }}
+          RESEND_MAIL: ${{ secrets.RESEND_MAIL }}
+          REPORT_RECIPIENT: ${{ secrets.REPORT_RECIPIENT }}
+        run: |
+          python - <<'PY'
+          import base64
+          import csv
+          import json
+          import os
+          import re
+          import sys
+          from datetime import datetime, timezone
+          from pathlib import Path
+          from urllib import request
+
+          ROOT = Path(".").resolve()
+          REPORTS_DIR = ROOT / "reports"
+          REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+
+          SKIP_DIRS = {".git", ".venv", "__pycache__", "node_modules", ".idea", ".vscode"}
+          MAX_FILE_MB = int(os.environ.get("SCAN_MAX_MB", "5"))
+          MAX_FILE_BYTES = MAX_FILE_MB * 1024 * 1024
+
+          PATTERNS = [
+            {
+              "rule": "Email",
+              "regex": re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+            },
+            {
+              "rule": "AWS Access Key",
+              "regex": re.compile(r"AKIA[0-9A-Z]{16}")
+            },
+            {
+              "rule": "Private Key",
+              "regex": re.compile(r"-----BEGIN (RSA|EC|DSA|OPENSSH) PRIVATE KEY-----")
+            },
+            {
+              "rule": "JWT",
+              "regex": re.compile(r"eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9._-]+\.[A-Za-z0-9._-]+")
+            },
+            {
+              "rule": "Credit Card",
+              "regex": re.compile(r"\b(?:\d[ -]*?){13,16}\b")
+            },
+          ]
+
+          def is_text_file(path: Path) -> bool:
+            try:
+              chunk = path.read_bytes()[:2048]
+            except OSError:
+              return False
+            return b"\x00" not in chunk
+
+
+          def iter_files(root: Path):
+            for path in root.rglob("*"):
+              if path.is_dir():
+                continue
+              if any(part in SKIP_DIRS for part in path.parts):
+                continue
+              yield path
+
+
+          findings = []
+          scanned_files = 0
+          flagged_files = set()
+
+          for path in iter_files(ROOT):
+            try:
+              if path.stat().st_size > MAX_FILE_BYTES:
+                continue
+            except OSError:
+              continue
+            if not is_text_file(path):
+              continue
+
+            try:
+              content = path.read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+              continue
+
+            scanned_files += 1
+            for pattern in PATTERNS:
+              for match in pattern["regex"].finditer(content):
+                flagged_files.add(str(path))
+                snippet = match.group(0)[:160]
+                findings.append(
+                  {
+                    "file_path": str(path),
+                    "rule": pattern["rule"],
+                    "severity": "medium",
+                    "confidence": "medium",
+                    "snippet": snippet,
+                    "location": "",
+                  }
+                )
+
+          report = {
+            "report_version": 1,
+            "scan_type": "deep",
+            "folder": str(ROOT),
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "files_scanned": scanned_files,
+            "files_flagged": len(flagged_files),
+            "elapsed_seconds": None,
+            "findings": findings,
+          }
+
+          timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+          json_path = REPORTS_DIR / f"scan_report_{timestamp}.json"
+          csv_path = REPORTS_DIR / f"scan_report_{timestamp}.csv"
+
+          json_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+          with csv_path.open("w", newline="", encoding="utf-8") as handle:
+            writer = csv.DictWriter(
+              handle,
+              fieldnames=["file_path", "rule", "severity", "confidence", "snippet", "location"],
+            )
+            writer.writeheader()
+            writer.writerows(findings)
+
+          resend_key = os.environ.get("RESEND_KEY", "").strip()
+          resend_mail = os.environ.get("RESEND_MAIL", "").strip()
+          recipient = os.environ.get("REPORT_RECIPIENT", "").strip()
+          if not resend_key or not resend_mail or not recipient:
+            raise RuntimeError("RESEND_KEY, RESEND_MAIL, and REPORT_RECIPIENT are required")
+
+          attachments = []
+          for path in (json_path, csv_path):
+            encoded = base64.b64encode(path.read_bytes()).decode("utf-8")
+            attachments.append({"filename": path.name, "content": encoded})
+
+          payload = {
+            "from": resend_mail,
+            "to": [recipient],
+            "subject": "Conlenz Scan Report",
+            "text": (
+              "Conlenz Scan Summary\n\n"
+              f"Folder: {ROOT}\n"
+              f"Generated at: {report['generated_at']}\n"
+              f"Files scanned: {report['files_scanned']}\n"
+              f"Files flagged: {report['files_flagged']}\n\n"
+              "See attached reports for details."
+            ),
+            "attachments": attachments,
+          }
+
+          req = request.Request(
+            "https://api.resend.com/emails",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+              "Authorization": f"Bearer {resend_key}",
+              "Content-Type": "application/json",
+            },
+          )
+          with request.urlopen(req, timeout=30) as resp:
+            if resp.status >= 300:
+              raise RuntimeError(f"Resend error {resp.status}: {resp.read().decode('utf-8')}")
+          PY
+
+      - name: Upload reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: conlenz-scan-reports
+          path: reports/
+          if-no-files-found: error
