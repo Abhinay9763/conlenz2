@@ -24,6 +24,12 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "domains": [],
         "emails": [],
     },
+    "auto_track": {
+        "enabled": True,
+        "debounce_seconds": 15,
+        "default_scan_type": "quick",
+        "repos": [],
+    },
     "ocr": {
         "enabled_deep": True,
         "enabled_quick": False,
@@ -45,6 +51,10 @@ def _app_root() -> Path:
     root = Path.home() / ".conlenz_audit"
     root.mkdir(parents=True, exist_ok=True)
     return root
+
+
+def app_root() -> Path:
+    return _app_root()
 
 
 def settings_path() -> Path:
@@ -81,6 +91,12 @@ def load_settings() -> dict[str, Any]:
     allow_list = settings.get("allow_list", {}) if isinstance(settings.get("allow_list", {}), dict) else {}
     settings["allow_list"]["domains"] = allow_list.get("domains", [])
     settings["allow_list"]["emails"] = allow_list.get("emails", [])
+
+    auto_track = settings.get("auto_track", {}) if isinstance(settings.get("auto_track", {}), dict) else {}
+    settings["auto_track"]["enabled"] = bool(auto_track.get("enabled", True))
+    settings["auto_track"]["debounce_seconds"] = int(auto_track.get("debounce_seconds", 15))
+    settings["auto_track"]["default_scan_type"] = str(auto_track.get("default_scan_type", "quick"))
+    settings["auto_track"]["repos"] = auto_track.get("repos", [])
 
     return settings
 

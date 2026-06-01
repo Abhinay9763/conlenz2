@@ -23,6 +23,17 @@ def apply_style(app) -> None:
         QLabel#BrandSubtitle {
             color: #3c5a6a;
         }
+        QLabel#BrandLogo {
+            background: transparent;
+        }
+        QLabel#AutoTitle {
+            font-size: 22px;
+            font-weight: 700;
+            color: #0f2b3c;
+        }
+        QLabel#AutoSubtitle {
+            color: #4e6b7c;
+        }
         QPushButton#PrimaryBtn {
             background: #0f7acb;
             color: white;

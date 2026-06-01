@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QThread, Signal, QObject
+from PySide6.QtCore import QThread, Signal, QObject, Qt
+from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
@@ -22,8 +23,11 @@ from PySide6.QtWidgets import (
 )
 
 from app.core.report import export_report_excel, send_report_email, write_report_json
+from app.core.auto_track_manager import AutoTrackManager
 from app.core.scanner import run_scan
 from app.core.settings import DEFAULT_FLAGS, load_settings, save_settings
+from app.ui.auto_track_window import AutoTrackWindow
+from app.ui.icon_utils import apply_window_icon
 
 
 class ScanWorker(QObject):
@@ -167,12 +171,18 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Conlenz Audit Tool")
         self.resize(1200, 780)
+        apply_window_icon(self)
 
         self._settings = load_settings()
         self._current_report: dict | None = None
         self._thread: QThread | None = None
         self._worker: ScanWorker | None = None
         self._mode = "quick"
+        self._auto_track_manager = AutoTrackManager()
+        self._auto_track_manager.reload_settings()
+        self._auto_track_manager.scanStarted.connect(self._on_auto_track_scan_started)
+        self._auto_track_manager.scanNotification.connect(self._on_auto_track_notification)
+        self._auto_track_window: AutoTrackWindow | None = None
 
         root = QWidget()
         root.setObjectName("AppRoot")
@@ -200,6 +210,13 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(16)
 
+        logo = QLabel()
+        logo.setObjectName("BrandLogo")
+        logo_pixmap = self._load_logo_pixmap()
+        if logo_pixmap is not None:
+            logo.setPixmap(logo_pixmap)
+        layout.addWidget(logo)
+
         title = QLabel("Conlenz")
         title.setObjectName("BrandTitle")
         subtitle = QLabel("Automatic audit tool for customer-facing content")
@@ -211,6 +228,11 @@ class MainWindow(QMainWindow):
 
         layout.addLayout(left)
         layout.addStretch(1)
+
+        auto_track_btn = QPushButton("Auto-Track")
+        auto_track_btn.setObjectName("GhostBtn")
+        auto_track_btn.clicked.connect(self._open_auto_track)
+        layout.addWidget(auto_track_btn)
 
         settings_btn = QPushButton("Settings")
         settings_btn.setObjectName("GhostBtn")
@@ -435,3 +457,27 @@ class MainWindow(QMainWindow):
         dialog = SettingsDialog(self, load_settings())
         if dialog.exec() == dialog.Accepted:
             self._settings = load_settings()
+            self._auto_track_manager.reload_settings()
+
+    def _open_auto_track(self) -> None:
+        if self._auto_track_window is None:
+            self._auto_track_window = AutoTrackWindow(self._auto_track_manager)
+        self._auto_track_window.show()
+        self._auto_track_window.raise_()
+        self._auto_track_window.activateWindow()
+
+    def _load_logo_pixmap(self) -> QPixmap | None:
+        logo_path = Path(__file__).resolve().parents[2] / "assets" / "logo.png"
+        if not logo_path.exists():
+            return None
+        pixmap = QPixmap(str(logo_path))
+        if pixmap.isNull():
+            return None
+        return pixmap.scaled(46, 46, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+
+    def _on_auto_track_scan_started(self, _repo_id: str, scan_type: str, source: str) -> None:
+        self.status_label.setText(f"Auto-Track {source} {scan_type} scan started")
+
+    def _on_auto_track_notification(self, _repo_id: str, scan_type: str, source: str, ok: bool, _message: str) -> None:
+        status = "completed" if ok else "failed"
+        self.status_label.setText(f"Auto-Track {source} {scan_type} scan {status}")
