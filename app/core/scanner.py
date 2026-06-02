@@ -16,20 +16,20 @@ from app.core.settings import load_settings, update_quick_state
 SKIP_DIRS = {".git", ".venv", "__pycache__", "node_modules", ".idea", ".vscode"}
 
 
-def run_scan(target: Path, mode: str) -> dict:
+def run_scan(target: Path, mode: str, explicit_files: list[Path] | None = None) -> dict:
     start = perf_counter()
     if target.is_file() and target.suffix.lower() == ".zip":
         with tempfile.TemporaryDirectory() as temp_dir:
             extracted = _extract_zip(target, Path(temp_dir))
-            report = _scan_folder(extracted, mode)
+            report = _scan_folder(extracted, mode, explicit_files)
     else:
-        report = _scan_folder(target, mode)
+        report = _scan_folder(target, mode, explicit_files)
 
     report["elapsed_seconds"] = round(perf_counter() - start, 2)
     return report
 
 
-def _scan_folder(folder: Path, mode: str) -> dict:
+def _scan_folder(folder: Path, mode: str, explicit_files: list[Path] | None = None) -> dict:
     settings = load_settings()
     flags = settings.get("scan_flags", {}) if isinstance(settings.get("scan_flags", {}), dict) else {}
     allow_list = settings.get("allow_list", {}) if isinstance(settings.get("allow_list", {}), dict) else {}
@@ -42,7 +42,7 @@ def _scan_folder(folder: Path, mode: str) -> dict:
     max_file_size_mb = int(limits.get("max_file_size_mb_deep", 25)) if mode == "deep" else int(limits.get("max_file_size_mb_quick", 10))
     max_text_chars = int(limits.get("max_text_chars", 500000))
 
-    file_targets = _resolve_targets(folder, mode)
+    file_targets = explicit_files if explicit_files is not None else _resolve_targets(folder, mode)
     findings: list[Finding] = []
     scanned_files = 0
 

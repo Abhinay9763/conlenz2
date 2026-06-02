@@ -10,11 +10,18 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v44
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: "pip"
 
       - name: Install dependencies
         run: |
@@ -27,10 +34,16 @@ jobs:
           RESEND_MAIL: ${{ secrets.RESEND_MAIL }}
           REPORT_RECIPIENT: ${{ secrets.REPORT_RECIPIENT }}
         run: |
-          python -m app.cli_scan --path . --mode deep --recipient "$REPORT_RECIPIENT" --out reports
+          if [ -n "${{ steps.changed-files.outputs.all_changed_files }}" ]; then
+            python -m app.cli_scan --path . --mode deep --recipient "$REPORT_RECIPIENT" --out reports --changed-files ${{ steps.changed-files.outputs.all_changed_files }}
+          else
+            echo "No files changed."
+            mkdir reports
+          fi
 
       - name: Upload report artifacts
         uses: actions/upload-artifact@v4
         with:
           name: conlenz-reports
           path: reports
+          if-no-files-found: ignore
