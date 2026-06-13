@@ -1,48 +1,84 @@
 name: conlenz-repo-scan
 
 on:
-  
   push:
     branches: [main]
   workflow_dispatch:
+
+# Queue overlapping pushes to main instead of cancelling them
+concurrency:
+  group: repo-scan-main
+  cancel-in-progress: false
+
+permissions:
+  contents: read
 
 jobs:
   scan:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
-      - name: Checkout
+      # 1. Checkout THIS repo (the one being scanned) into ./repo
+      - name: Checkout target repo
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          path: repo
 
+      # 2. Detect which files changed in this push
       - name: Get changed files
         id: changed-files
         uses: tj-actions/changed-files@v44
+        with:
+          path: repo
+
+      # 3. Checkout the conlenz scanner into ./conlenz
+      - name: Checkout conlenz scanner
+        uses: actions/checkout@v4
+        with:
+          repository: Abhinay9763/conlenz2
+          ref: main
+          path: conlenz
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          cache: "pip"
+
+      - name: Cache virtual environment
+        id: cache-venv
+        uses: actions/cache@v4
+        with:
+          path: conlenz/.venv
+          key: ${{ runner.os }}-venv-${{ hashFiles('conlenz/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-venv-
 
       - name: Install dependencies
+        if: steps.cache-venv.outputs.cache-hit != 'true'
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          python -m venv conlenz/.venv
+          conlenz/.venv/bin/python -m pip install --upgrade pip
+          conlenz/.venv/bin/pip install -r conlenz/requirements.txt
 
       - name: Run scan
         env:
           RESEND_KEY: ${{ secrets.RESEND_KEY }}
           RESEND_MAIL: ${{ secrets.RESEND_MAIL }}
           REPORT_RECIPIENT: ${{ secrets.REPORT_RECIPIENT }}
-          GITHUB_STEP_SUMMARY: ${{ github.step_summary }}
         run: |
-          if [ -n "${{ steps.changed-files.outputs.all_changed_files }}" ]; then
-            python -m app.cli_scan --path . --mode deep --recipient "$REPORT_RECIPIENT" --out reports --changed-files ${{ steps.changed-files.outputs.all_changed_files }}
+          CHANGED="${{ steps.changed-files.outputs.all_changed_files }}"
+          if [ -n "$CHANGED" ]; then
+            cd conlenz
+            .venv/bin/python -m app.cli_scan \
+              --path ../repo \
+              --mode deep \
+              --recipient "$REPORT_RECIPIENT" \
+              --out ../reports \
+              --changed-files $CHANGED
           else
-            echo "No files changed."
-            mkdir reports
+            echo "No files changed — skipping scan."
+            mkdir -p reports
           fi
 
       - name: Upload reports
