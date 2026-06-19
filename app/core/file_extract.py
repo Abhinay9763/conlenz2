@@ -21,12 +21,14 @@ class ExtractResult:
         source: str,
         image_width: int | None = None,
         image_height: int | None = None,
+        image_dpi: tuple[float, float] | None = None,
         ocr_used: bool = False,
     ) -> None:
         self.text = text
         self.source = source
         self.image_width = image_width
         self.image_height = image_height
+        self.image_dpi = image_dpi
         self.ocr_used = ocr_used
 
 
@@ -52,16 +54,17 @@ def extract_text(
 def _extract_image(path: Path, ocr_enabled: bool, ocr_languages: list[str]) -> ExtractResult:
     with Image.open(path) as image:
         width, height = image.size
+        dpi = image.info.get("dpi")
 
     if not ocr_enabled:
-        return ExtractResult("", source="image", image_width=width, image_height=height, ocr_used=False)
+        return ExtractResult("", source="image", image_width=width, image_height=height, image_dpi=dpi, ocr_used=False)
 
     reader, error = load_easyocr(ocr_languages)
     if reader is None:
-        return ExtractResult("", source=f"image:{error}", image_width=width, image_height=height, ocr_used=False)
+        return ExtractResult("", source=f"image:{error}", image_width=width, image_height=height, image_dpi=dpi, ocr_used=False)
 
     text = ocr_image(path, reader)
-    return ExtractResult(text, source="image:ocr", image_width=width, image_height=height, ocr_used=True)
+    return ExtractResult(text, source="image:ocr", image_width=width, image_height=height, image_dpi=dpi, ocr_used=True)
 
 
 def _extract_pdf(

@@ -85,6 +85,20 @@ def _scan_folder(
             max_text_chars=max_text_chars,
         )
 
+        if result.image_dpi:
+            x_dpi, y_dpi = result.image_dpi
+            if x_dpi <= 75 or y_dpi <= 75:
+                findings.append(
+                    Finding(
+                        file_path=str(path),
+                        rule="Low Quality Image",
+                        severity="medium",
+                        confidence="high",
+                        snippet=f"Image DPI is low: {x_dpi}x{y_dpi}",
+                        location="",
+                    )
+                )
+
         per_file = apply_rules(
             text=result.text,
             file_path=str(path),
