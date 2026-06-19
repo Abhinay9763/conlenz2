@@ -16,20 +16,30 @@ from app.core.settings import load_settings, update_quick_state
 SKIP_DIRS = {".git", ".venv", "__pycache__", "node_modules", ".idea", ".vscode"}
 
 
-def run_scan(target: Path, mode: str, explicit_files: list[Path] | None = None) -> dict:
+def run_scan(
+    target: Path,
+    mode: str,
+    explicit_files: list[Path] | None = None,
+    on_file=None,
+) -> dict:
     start = perf_counter()
     if target.is_file() and target.suffix.lower() == ".zip":
         with tempfile.TemporaryDirectory() as temp_dir:
             extracted = _extract_zip(target, Path(temp_dir))
-            report = _scan_folder(extracted, mode, explicit_files)
+            report = _scan_folder(extracted, mode, explicit_files, on_file=on_file)
     else:
-        report = _scan_folder(target, mode, explicit_files)
+        report = _scan_folder(target, mode, explicit_files, on_file=on_file)
 
     report["elapsed_seconds"] = round(perf_counter() - start, 2)
     return report
 
 
-def _scan_folder(folder: Path, mode: str, explicit_files: list[Path] | None = None) -> dict:
+def _scan_folder(
+    folder: Path,
+    mode: str,
+    explicit_files: list[Path] | None = None,
+    on_file=None,
+) -> dict:
     settings = load_settings()
     flags = settings.get("scan_flags", {}) if isinstance(settings.get("scan_flags", {}), dict) else {}
     allow_list = settings.get("allow_list", {}) if isinstance(settings.get("allow_list", {}), dict) else {}
@@ -52,6 +62,8 @@ def _scan_folder(folder: Path, mode: str, explicit_files: list[Path] | None = No
         if _is_skipped(path):
             continue
         scanned_files += 1
+        if on_file:
+            on_file(str(path), scanned_files)
         if path.stat().st_size > max_file_size_mb * 1024 * 1024:
             findings.append(
                 Finding(

@@ -51,6 +51,18 @@ def apply_style(app) -> None:
             padding: 8px 14px;
             border-radius: 8px;
         }
+        QPushButton#GhostBtn:hover {
+            background: #eaf4ff;
+            border-color: #5fa8d3;
+            color: #0a2a3a;
+        }
+        QPushButton#GhostBtn:pressed {
+            background: #d0eaff;
+            border-color: #3a88b8;
+        }
+        QPushButton#PrimaryBtn:pressed {
+            background: #0a5292;
+        }
         QLineEdit#InputField {
             background: white;
             border: 1px solid #d5e2ec;

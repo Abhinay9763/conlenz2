@@ -20,17 +20,9 @@ jobs:
       - name: Checkout target repo
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
           path: repo
 
-      # 2. Detect which files changed in this PR
-      - name: Get changed files
-        id: changed-files
-        uses: tj-actions/changed-files@v44
-        with:
-          path: repo
-
-      # 3. Checkout the conlenz scanner into ./conlenz
+      # 2. Checkout the conlenz scanner into ./conlenz
       - name: Checkout conlenz scanner
         uses: actions/checkout@v4
         with:
@@ -65,19 +57,12 @@ jobs:
           RESEND_MAIL: ${{ secrets.RESEND_MAIL }}
           REPORT_RECIPIENT: ${{ secrets.REPORT_RECIPIENT }}
         run: |
-          CHANGED="${{ steps.changed-files.outputs.all_changed_files }}"
-          if [ -n "$CHANGED" ]; then
-            cd conlenz
-            .venv/bin/python -m app.cli_scan \
-              --path ../repo \
-              --mode deep \
-              --recipient "$REPORT_RECIPIENT" \
-              --out ../reports \
-              --changed-files $CHANGED
-          else
-            echo "No files changed — skipping scan."
-            mkdir -p reports
-          fi
+          cd conlenz
+          .venv/bin/python -m app.cli_scan \
+            --path ../repo \
+            --mode deep \
+            --recipient "$REPORT_RECIPIENT" \
+            --out ../reports
 
       - name: Upload report artifacts
         uses: actions/upload-artifact@v4

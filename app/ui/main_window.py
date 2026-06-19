@@ -33,6 +33,7 @@ from app.ui.icon_utils import apply_window_icon
 class ScanWorker(QObject):
     finished = Signal(dict)
     failed = Signal(str)
+    progress = Signal(str, int)  # current file path, count so far
 
     def __init__(self, target: Path, mode: str) -> None:
         super().__init__()
@@ -41,11 +42,14 @@ class ScanWorker(QObject):
 
     def run(self) -> None:
         try:
-            report = run_scan(self._target, self._mode)
+            report = run_scan(self._target, self._mode, on_file=self._on_file)
         except Exception as exc:
             self.failed.emit(str(exc))
             return
         self.finished.emit(report)
+
+    def _on_file(self, file_path: str, count: int) -> None:
+        self.progress.emit(file_path, count)
 
 
 class DropZone(QFrame):
@@ -203,6 +207,10 @@ class MainWindow(QMainWindow):
         right = self._build_right_panel()
         content.addWidget(left, 1)
         content.addWidget(right, 2)
+
+        # Apply pointing hand cursor to every button in the window
+        for btn in self.findChildren(QPushButton):
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
 
     def _build_header(self) -> QWidget:
         card = QWidget()
@@ -392,6 +400,7 @@ class MainWindow(QMainWindow):
         self._thread.started.connect(self._worker.run)
         self._worker.finished.connect(self._scan_finished)
         self._worker.failed.connect(self._scan_failed)
+        self._worker.progress.connect(self._scan_progress)
         self._worker.finished.connect(self._thread.quit)
         self._worker.failed.connect(self._thread.quit)
         self._thread.start()
@@ -410,6 +419,11 @@ class MainWindow(QMainWindow):
         self.status_label.setText("Scan failed")
         self.progress.hide()
         self.scan_btn.setEnabled(True)
+
+    def _scan_progress(self, file_path: str, count: int) -> None:
+        self.scanned_value.setText(str(count))
+        name = Path(file_path).name
+        self.status_label.setText(f"Scanning: {name}")
 
     def _load_findings(self, findings: list[dict]) -> None:
         self.table.setRowCount(0)
@@ -455,7 +469,7 @@ class MainWindow(QMainWindow):
 
     def _open_settings(self) -> None:
         dialog = SettingsDialog(self, load_settings())
-        if dialog.exec() == dialog.Accepted:
+        if dialog.exec() == QDialog.DialogCode.Accepted:
             self._settings = load_settings()
             self._auto_track_manager.reload_settings()
 

@@ -4,7 +4,7 @@ import argparse
 from pathlib import Path
 
 import os
-from app.core.report import export_report_excel, send_report_email, write_report_json
+from app.core.report import export_report_excel, send_report_email, write_report_json, write_github_summary
 from app.core.scanner import run_scan
 from app.core.settings import load_settings
 
@@ -38,18 +38,7 @@ def main() -> int:
 
     summary_path = os.environ.get("GITHUB_STEP_SUMMARY", "").strip()
     if summary_path:
-        with open(summary_path, "a", encoding="utf-8") as handle:
-            handle.write("# Conlenz Repo Scan\n\n")
-            handle.write(f"- Folder: {target}\n")
-            handle.write(f"- Generated at: {report['generated_at']}\n")
-            handle.write(f"- Files scanned: {report['files_scanned']}\n")
-            handle.write(f"- Files flagged: {report['files_flagged']}\n\n")
-            findings = report.get("findings", [])
-            if findings:
-                handle.write("## Top Findings\n\n")
-                for item in findings[:10]:
-                    snippet = str(item.get("snippet", ""))[:160]
-                    handle.write(f"- {item.get('rule', 'Unknown')}: {item.get('file_path', '')} ({snippet})\n")
+        write_github_summary(report, summary_path)
 
     return 0
 

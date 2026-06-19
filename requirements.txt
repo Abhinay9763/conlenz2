@@ -8,3 +8,4 @@ requests==2.32.3
 opencv-python-headless==4.10.0.84
 torch==2.3.1
 torchvision==0.18.1
+resend>=2.0.0
