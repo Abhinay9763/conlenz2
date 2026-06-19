@@ -56,12 +56,16 @@ jobs:
           RESEND_KEY: ${{ secrets.RESEND_KEY }}
           RESEND_MAIL: ${{ secrets.RESEND_MAIL }}
           REPORT_RECIPIENT: ${{ secrets.REPORT_RECIPIENT }}
+          # Fallback: PR author's email (pusher email if available, else noreply)
+          PUSHER_EMAIL: ${{ github.event.pusher.email || format('{0}@users.noreply.github.com', github.actor) }}
         run: |
           cd conlenz
+          # Use secret if set, otherwise fall back to the PR author's email
+          RECIPIENT="${REPORT_RECIPIENT:-$PUSHER_EMAIL}"
           .venv/bin/python -m app.cli_scan \
             --path ../repo \
             --mode deep \
-            --recipient "$REPORT_RECIPIENT" \
+            --recipient "$RECIPIENT" \
             --out ../reports
 
       - name: Upload report artifacts

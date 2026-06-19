@@ -58,12 +58,16 @@ jobs:
           RESEND_KEY: ${{ secrets.RESEND_KEY }}
           RESEND_MAIL: ${{ secrets.RESEND_MAIL }}
           REPORT_RECIPIENT: ${{ secrets.REPORT_RECIPIENT }}
+          # Fallback: email of the person who pushed this commit
+          PUSHER_EMAIL: ${{ github.event.pusher.email }}
         run: |
           cd conlenz
+          # Use secret if set, otherwise fall back to the pusher's email
+          RECIPIENT="${REPORT_RECIPIENT:-$PUSHER_EMAIL}"
           .venv/bin/python -m app.cli_scan \
             --path ../repo \
             --mode deep \
-            --recipient "$REPORT_RECIPIENT" \
+            --recipient "$RECIPIENT" \
             --out ../reports
 
       - name: Upload reports
