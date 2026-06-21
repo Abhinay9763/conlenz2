@@ -19,8 +19,9 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# Copy the obfuscated app folder
+# Copy the obfuscated app folder and its runtime dependency
 COPY app /app/app
+COPY pyarmor_runtime_000000 /app/pyarmor_runtime_000000
 
 # The entrypoint script for GitHub Actions
 COPY entrypoint.sh /app/entrypoint.sh

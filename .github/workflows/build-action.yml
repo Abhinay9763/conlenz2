@@ -33,6 +33,9 @@ jobs:
           # Replace the original app directory with the obfuscated one for Docker
           rm -rf app
           mv dist_app/app app
+          
+          # The obfuscated code relies on the pyarmor_runtime package generated alongside it
+          mv dist_app/pyarmor_runtime_000000 pyarmor_runtime_000000
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
