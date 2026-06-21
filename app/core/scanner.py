@@ -4,6 +4,8 @@ import tempfile
 from pathlib import Path
 from time import perf_counter
 import time
+import os
+import requests
 from typing import Iterable
 
 from app.core.file_extract import extract_text
@@ -20,15 +22,16 @@ def run_scan(
     target: Path,
     mode: str,
     explicit_files: list[Path] | None = None,
+    token: str = "",
     on_file=None,
 ) -> dict:
     start = perf_counter()
     if target.is_file() and target.suffix.lower() == ".zip":
         with tempfile.TemporaryDirectory() as temp_dir:
             extracted = _extract_zip(target, Path(temp_dir))
-            report = _scan_folder(extracted, mode, explicit_files, on_file=on_file)
+            report = _scan_folder(extracted, mode, explicit_files, token, on_file=on_file)
     else:
-        report = _scan_folder(target, mode, explicit_files, on_file=on_file)
+        report = _scan_folder(target, mode, explicit_files, token, on_file=on_file)
 
     report["elapsed_seconds"] = round(perf_counter() - start, 2)
     return report
@@ -38,6 +41,7 @@ def _scan_folder(
     folder: Path,
     mode: str,
     explicit_files: list[Path] | None = None,
+    token: str = "",
     on_file=None,
 ) -> dict:
     settings = load_settings()
@@ -51,6 +55,30 @@ def _scan_folder(
     ocr_enabled = bool(ocr_settings.get("enabled_deep", True)) if mode == "deep" else bool(ocr_settings.get("enabled_quick", False))
     max_file_size_mb = int(limits.get("max_file_size_mb_deep", 25)) if mode == "deep" else int(limits.get("max_file_size_mb_quick", 10))
     max_text_chars = int(limits.get("max_text_chars", 500000))
+
+    # --- Freemium Validation ---
+    is_paid = False
+    tier_message = "Free Tier"
+    if token:
+        api_url = os.environ.get("CONLENZ_API_URL", "http://localhost:8000").rstrip("/")
+        try:
+            resp = requests.post(f"{api_url}/verify", json={"token": token}, timeout=5)
+            if resp.status_code == 200 and resp.json().get("valid"):
+                is_paid = True
+                tier_message = "Paid Tier"
+            else:
+                tier_message = "Free Tier (Invalid Token)"
+        except Exception:
+            tier_message = "Free Tier (Verification Failed)"
+
+    if not is_paid:
+        ocr_enabled = False
+        # Free tier only checks email and personal_name
+        for k in list(flags.keys()):
+            if k not in ("email", "personal_name"):
+                flags[k] = False
+        flags["email"] = True
+        flags["personal_name"] = True
 
     file_targets = explicit_files if explicit_files is not None else _resolve_targets(folder, mode)
     findings: list[Finding] = []
@@ -85,7 +113,7 @@ def _scan_folder(
             max_text_chars=max_text_chars,
         )
 
-        if result.image_dpi:
+        if result.image_dpi and is_paid:
             x_dpi, y_dpi = result.image_dpi
             if x_dpi <= 75 or y_dpi <= 75:
                 findings.append(
@@ -112,12 +140,14 @@ def _scan_folder(
     if mode == "quick" and folder.exists():
         update_quick_state(folder, time.time())
 
-    return build_report(
+    report = build_report(
         scan_type=mode,
         folder=str(folder),
         findings=findings,
         scanned_files=scanned_files,
     )
+    report["tier"] = tier_message
+    return report
 
 
 def _resolve_targets(folder: Path, mode: str) -> Iterable[Path]:

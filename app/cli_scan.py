@@ -14,6 +14,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--path", required=True, help="Folder or zip file to scan")
     parser.add_argument("--mode", choices=["quick", "deep"], default="deep")
     parser.add_argument("--recipient", default="", help="Override recipient email")
+    parser.add_argument("--token", default="", help="License token for Paid Tier features")
     parser.add_argument("--out", default="reports", help="Output directory")
     parser.add_argument("--changed-files", nargs="*", help="List of files to scan explicitly")
     return parser.parse_args()
@@ -23,7 +24,7 @@ def main() -> int:
     args = parse_args()
     target = Path(args.path).resolve()
     explicit_files = [Path(p).resolve() for p in args.changed_files] if args.changed_files else None
-    report = run_scan(target, args.mode, explicit_files=explicit_files)
+    report = run_scan(target, args.mode, explicit_files=explicit_files, token=args.token)
     out_dir = Path(args.out).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
 
