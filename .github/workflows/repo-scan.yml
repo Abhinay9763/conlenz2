@@ -31,6 +31,7 @@ jobs:
           repository: Abhinay9763/conlenz2
           ref: main
           path: conlenz
+          token: ${{ secrets.CONLENZ_ACCESS_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
