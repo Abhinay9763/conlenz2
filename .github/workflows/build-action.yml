@@ -1,0 +1,49 @@
+name: Build and Publish Action
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install PyArmor
+        run: pip install pyarmor
+
+      - name: Obfuscate Code
+        run: |
+          # Obfuscate the app directory recursively
+          pyarmor gen -O dist_app app/
+          
+          # Replace the original app directory with the obfuscated one for Docker
+          rm -rf app
+          mv dist_app app
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/conlenz-action:latest
