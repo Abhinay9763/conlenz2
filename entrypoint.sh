@@ -12,6 +12,9 @@ export CONLENZ_API_URL="${CONLENZ_API_URL:-http://localhost:8000}"
 echo "Starting Conlenz Scan in mode: $MODE"
 echo "Scanning path: $PATH_TO_SCAN"
 
+# Change directory to where the conlenz app is installed inside the Docker container
+cd /app
+
 # Run the CLI scanner
 python -m app.cli_scan \
     --path "$PATH_TO_SCAN" \
