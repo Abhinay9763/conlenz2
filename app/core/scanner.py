@@ -82,6 +82,7 @@ def _scan_folder(
 
     file_targets = explicit_files if explicit_files is not None else _resolve_targets(folder, mode)
     findings: list[Finding] = []
+    scanned_file_paths: list[str] = []
     scanned_files = 0
 
     for path in file_targets:
@@ -90,6 +91,7 @@ def _scan_folder(
         if _is_skipped(path):
             continue
         scanned_files += 1
+        scanned_file_paths.append(str(path))
         if on_file:
             on_file(str(path), scanned_files)
         if path.stat().st_size > max_file_size_mb * 1024 * 1024:
@@ -145,6 +147,7 @@ def _scan_folder(
         folder=str(folder),
         findings=findings,
         scanned_files=scanned_files,
+        scanned_file_paths=scanned_file_paths,
     )
     report["tier"] = tier_message
     return report

@@ -15,8 +15,11 @@ def build_report(
     folder: str,
     findings: list[Finding],
     scanned_files: int = 0,
+    scanned_file_paths: list[str] = None,
     elapsed_seconds: float | None = None,
 ) -> dict[str, Any]:
+    if scanned_file_paths is None:
+        scanned_file_paths = []
     flagged_files = len({finding.file_path for finding in findings})
     return {
         "report_version": 1,
@@ -26,6 +29,7 @@ def build_report(
         "files_scanned": scanned_files,
         "files_flagged": flagged_files,
         "elapsed_seconds": elapsed_seconds,
+        "scanned_file_paths": scanned_file_paths,
         "findings": [finding.__dict__ for finding in findings],
     }
 
@@ -183,6 +187,24 @@ def export_report_excel(report: dict[str, Any], export_path: Path) -> None:
     if findings:
         fd.auto_filter.ref = f"A1:{get_column_letter(len(HEADERS))}{len(findings) + 1}"
 
+    # ── Sheet 3: Scanned Files ────────────────────────────────────────────────
+    scanned_paths = report.get("scanned_file_paths", [])
+    if scanned_paths:
+        sf = workbook.create_sheet("Scanned Files")
+        c = sf.cell(row=1, column=1, value="File Path")
+        c.font = Font(bold=True, color=WHITE, size=10)
+        c.fill = PatternFill("solid", fgColor=DARK_BLUE)
+        c.alignment = Alignment(horizontal="left", vertical="center")
+        sf.column_dimensions["A"].width = 80
+        sf.row_dimensions[1].height = 22
+
+        for row_idx, path_str in enumerate(scanned_paths, start=2):
+            fill = GREY_ROW if row_idx % 2 == 0 else WHITE
+            cell = sf.cell(row=row_idx, column=1, value=path_str)
+            cell.fill = PatternFill("solid", fgColor=fill)
+            cell.alignment = Alignment(wrap_text=True, vertical="center", indent=1)
+            sf.row_dimensions[row_idx].height = 15
+
     workbook.save(export_path)
 
 
@@ -312,6 +334,17 @@ def write_github_summary(report: dict[str, Any], summary_path: str) -> None:
     lines.append(f"| 📋 Total findings | **{len(findings)}** |")
     lines.append(f"| ⏱️ Elapsed | `{elapsed_display}` |")
     lines.append("")
+
+    # ── Scanned Files (Top 10) ────────────────────────────────────────────────
+    scanned_paths = report.get("scanned_file_paths", [])
+    if scanned_paths:
+        lines.append("## 📁 Scanned Files\n")
+        display_paths = scanned_paths[:10]
+        for p in display_paths:
+            lines.append(f"- `{p}`")
+        if len(scanned_paths) > 10:
+            lines.append(f"\n_... and {len(scanned_paths) - 10} more files_")
+        lines.append("\n---\n")
 
     if not findings:
         lines.append("---\n")

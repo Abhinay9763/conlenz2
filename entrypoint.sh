@@ -20,6 +20,7 @@ python -m app.cli_scan \
     --path "$PATH_TO_SCAN" \
     --mode "$MODE" \
     --token "$TOKEN" \
+    --recipient "$REPORT_RECIPIENT" \
     --out "${GITHUB_WORKSPACE}/reports"
 
 echo "Scan complete."
